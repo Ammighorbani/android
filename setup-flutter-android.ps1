@@ -166,7 +166,7 @@ function Get-LatestAndroidCmdlineToolsUrl {
 
     # Fallback candidates if XML parsing is not enough
     $candidates = @(
-        "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip",
+        "https://dl.google.com/android/repository/commandlinetools-win-14742923_latest.zip",
         "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip",
         "https://dl.google.com/android/repository/commandlinetools-win-12996373_latest.zip",
         "https://dl.google.com/android/repository/commandlinetools-win-12700392_latest.zip",
