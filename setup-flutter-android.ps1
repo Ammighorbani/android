@@ -15,10 +15,14 @@ function Add-ToMachinePathIfMissing {
     )
 
     $current = [Environment]::GetEnvironmentVariable("Path", "Machine")
+    if ([string]::IsNullOrWhiteSpace($current)) {
+        $current = ""
+    }
+
     $parts = $current -split ';' | ForEach-Object { $_.Trim() } | Where-Object { $_ -ne "" }
 
     if ($parts -notcontains $PathToAdd) {
-        $newPath = ($parts + $PathToAdd) -join ';'
+        $newPath = (($parts + $PathToAdd) | Select-Object -Unique) -join ';'
         [Environment]::SetEnvironmentVariable("Path", $newPath, "Machine")
         Write-Host "Added to PATH: $PathToAdd" -ForegroundColor Green
     }
@@ -76,6 +80,64 @@ function Ensure-Directory {
     }
 }
 
+function Remove-FileIfExists {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    if (Test-Path $Path) {
+        Remove-Item -Force $Path
+    }
+}
+
+function Download-File {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [Parameter(Mandatory = $true)][string]$OutFile,
+        [int]$Retries = 3
+    )
+
+    Ensure-Directory -Path (Split-Path $OutFile -Parent)
+
+    for ($i = 1; $i -le $Retries; $i++) {
+        try {
+            Write-Host "Download attempt $i / $Retries" -ForegroundColor DarkCyan
+            Remove-FileIfExists -Path $OutFile
+
+            if (Test-CommandExists "curl.exe") {
+                & curl.exe -L --fail --retry 5 --retry-delay 2 -o $OutFile $Url
+                if ($LASTEXITCODE -ne 0) {
+                    throw "curl.exe failed with exit code $LASTEXITCODE"
+                }
+            }
+            elseif (Get-Command Start-BitsTransfer -ErrorAction SilentlyContinue) {
+                Start-BitsTransfer -Source $Url -Destination $OutFile
+            }
+            else {
+                Invoke-WebRequest -Uri $Url -OutFile $OutFile
+            }
+
+            if (-not (Test-Path $OutFile)) {
+                throw "Downloaded file not found: $OutFile"
+            }
+
+            $size = (Get-Item $OutFile).Length
+            if ($size -lt 1024) {
+                throw "Downloaded file is suspiciously small: $size bytes"
+            }
+
+            Write-Host "Downloaded successfully: $OutFile" -ForegroundColor Green
+            return
+        }
+        catch {
+            Write-Host "Download failed: $($_.Exception.Message)" -ForegroundColor Yellow
+            if ($i -eq $Retries) {
+                throw
+            }
+            Start-Sleep -Seconds (3 * $i)
+        }
+    }
+}
+
 Write-Step "Checking winget"
 if (-not (Test-CommandExists "winget")) {
     throw "winget is not installed. Install App Installer from Microsoft Store and retry."
@@ -127,7 +189,7 @@ Refresh-SessionPath
 Write-Step "Downloading latest stable Flutter SDK"
 $flutterZipUrl = Get-LatestFlutterWindowsStableZip
 Write-Host "Flutter URL: $flutterZipUrl" -ForegroundColor DarkGray
-Invoke-WebRequest -Uri $flutterZipUrl -OutFile $FlutterZip
+Download-File -Url $flutterZipUrl -OutFile $FlutterZip -Retries 3
 
 if (Test-Path $FlutterDir) {
     Write-Step "Removing existing Flutter directory"
@@ -141,7 +203,7 @@ Add-ToMachinePathIfMissing -PathToAdd (Join-Path $FlutterDir "bin")
 Refresh-SessionPath
 
 Write-Step "Downloading Android command-line tools"
-Invoke-WebRequest -Uri $AndroidCmdlineToolsUrl -OutFile $AndroidZip
+Download-File -Url $AndroidCmdlineToolsUrl -OutFile $AndroidZip -Retries 3
 
 if (Test-Path $CmdlineToolsLatest) {
     Remove-Item -Recurse -Force $CmdlineToolsLatest
@@ -151,8 +213,6 @@ Ensure-Directory -Path $CmdlineToolsLatest
 Write-Step "Extracting Android command-line tools"
 Expand-Archive -Path $AndroidZip -DestinationPath $CmdlineToolsLatest -Force
 
-# Fix nested archive structure:
-# latest\cmdline-tools\bin  -> latest\bin
 $NestedCmdlineTools = Join-Path $CmdlineToolsLatest "cmdline-tools"
 if (Test-Path $NestedCmdlineTools) {
     Write-Step "Fixing Android cmdline-tools directory layout"
@@ -195,7 +255,6 @@ y
 y
 y
 "@
-
 $licenseYes | & $sdkManagerBat --sdk_root=$AndroidSdkRoot --licenses
 
 Write-Step "Installing Android SDK packages"
