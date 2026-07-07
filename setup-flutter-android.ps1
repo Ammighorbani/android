@@ -153,7 +153,12 @@ $CmdlineToolsRoot   = Join-Path $AndroidSdkRoot "cmdline-tools"
 $CmdlineToolsLatest = Join-Path $CmdlineToolsRoot "latest"
 $AndroidZip         = Join-Path $TempDir "commandlinetools.zip"
 
-$AndroidCmdlineToolsUrl = "https://dl.google.com/android/repository/commandlinetools-win-11076708_latest.zip"
+$AndroidCmdlineToolsCandidates = @(
+    "https://dl.google.com/android/repository/commandlinetools-win-13114758_latest.zip",
+    "https://dl.google.com/android/repository/commandlinetools-win-12996373_latest.zip",
+    "https://dl.google.com/android/repository/commandlinetools-win-12700392_latest.zip",
+    "https://dl.google.com/android/repository/commandlinetools-win-12266719_latest.zip"
+)
 
 Write-Step "Creating directories"
 Ensure-Directory -Path $BaseDir
